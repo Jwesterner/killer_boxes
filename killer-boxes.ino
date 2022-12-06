@@ -13,13 +13,13 @@ LiquidCrystal_I2C lcd(0x27,16,2);  // address to 0x27, 16 chars, 2 line display
 #endif
 
 // Sprites
-uint8_t player_full[8] = {0x1f,0x0,0xe,0x11,0x1b,0x11,0xe,0xa};
-uint8_t player_half[8] = {0x1c,0x0,0xe,0x11,0x1b,0x11,0xe,0xa};
-uint8_t player_low[8] ={0x10,0x0,0xe,0x11,0x1b,0x11,0xe,0xa};
-uint8_t player_death[8] = {0x0,0x0,0xe,0x11,0x1b,0x11,0xe,0xa};
-uint8_t enemy[8] = {0xa,0x4,0x1f,0x1f,0x15,0x1f,0x1f,0xa};
-uint8_t flash[8] = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
-uint8_t bullet[8] = {0x0,0x0,0x0,0x0,0x1f,0x00,0x0,0x0};
+uint8_t player_full[8]  = {0x1f, 0x0,  0xe,  0x11, 0x1b, 0x11, 0xe,  0xa};
+uint8_t player_half[8]  = {0x1c, 0x0,  0xe,  0x11, 0x1b, 0x11, 0xe,  0xa};
+uint8_t player_low[8]   = {0x10, 0x0,  0xe,  0x11, 0x1b, 0x11, 0xe,  0xa};
+uint8_t player_death[8] = {0x0,  0x0,  0xe,  0x11, 0x1b, 0x11, 0xe,  0xa};
+uint8_t enemy[8]        = {0xa,  0x4,  0x1f, 0x1f, 0x15, 0x1f, 0x1f, 0xa};
+uint8_t flash[8]        = {0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f};
+uint8_t bullet[8]       = {0x0,  0x0,  0x0,  0x0,  0x1f, 0x00, 0x0,  0x0};
 
 // Joystick references
 int VRx = A0;
@@ -57,8 +57,14 @@ bool flashing = false;
 // Create Enemies off Screen
 #define ENEMY_INTERVAL 5
 #define ENEMY_COUNT 5
-//                      top-left              bottom-left           top-right             bottom-right
-float enemies[4][ENEMY_COUNT] = {{17, 17, 17, 17, 17}, {17, 17, 17, 17, 17}, {17, 17, 17, 17, 17}, {17, 17, 17, 17, 17}}; // one array of enemies for each origin point, value of 17 or greater means the enemy is gone
+
+// one array of enemies for each origin point, value of 17 or greater means the enemy is gone:
+float enemies[4][ENEMY_COUNT] = {
+  {17, 17, 17, 17, 17}, // top-left
+  {17, 17, 17, 17, 17}, // bottom-left
+  {17, 17, 17, 17, 17}, // top-right
+  {17, 17, 17, 17, 17}  // bottom-right
+};
 
 
 
@@ -169,6 +175,55 @@ void gameOverLoop() {
   initialize();
 }
 
+void doShot(int direction) {
+  int closestDist = 17;
+  int closestEnemy[2] = {5, 5};    // set to impossible values so the code knows if there are no results
+  int closeX = 0;
+  for (int i = 0; i < 4; i++) {
+    int enemyY = i % 2;
+    if (enemyY == playerY) {
+      for (int j = 0; j < ENEMY_COUNT; j++) {
+        int enemyX = getEnemyX(i, j);
+        int dist = (enemyX - playerX) * direction;
+        if (dist > 0 && dist < closestDist && enemies[i][j] < 17) {
+          closestDist = dist;
+          closestEnemy[0] = i;
+          closestEnemy[1] = j;
+          closeX = enemyX;
+        }
+      }
+    }
+  }
+  if (direction == 1) {
+    if (closestDist != 17) {
+      enemies[closestEnemy[0]][closestEnemy[1]] = 17;
+      score++;
+      for (int i = playerX + direction; i < closeX; i += direction) {
+        lcd.setCursor(i, playerY);
+        lcd.printByte(6);
+      }
+    } else {
+      for (int i = playerX + direction; i < 17; i += direction) {
+        lcd.setCursor(i, playerY);
+        lcd.printByte(6);
+      }
+    }
+  } else {
+    if (closestDist != 17) {
+      enemies[closestEnemy[0]][closestEnemy[1]] = 17;
+      score++;
+      for (int i = playerX + direction; i > closeX; i += direction) {
+        lcd.setCursor(i, playerY);
+        lcd.printByte(6);
+      }
+    } else {
+      for (int i = playerX + direction; i > 0; i += direction) {
+        lcd.setCursor(i, playerY);
+        lcd.printByte(6);
+      }
+    }
+  }
+}
 
 void gameLoop() {
   lcd.clear();
@@ -220,73 +275,11 @@ void gameLoop() {
 
   // gun shots
   if (lBtn && !lBtnLast) {
-    // left button pressed
-    int closestDist = 17;
-    int closestEnemy[2] = {5, 5};    // set to impossible values so the code knows if there are no results
-    int closeX = 0;
-    for (int i = 0; i < 4; i++) {
-      int enemyY = i % 2;
-      if (enemyY == playerY) {
-        for (int j = 0; j < ENEMY_COUNT; j++) {
-          int enemyX = getEnemyX(i, j);
-          int dist = playerX - enemyX;
-          if (dist > 0 && dist < closestDist && enemies[i][j] < 17) {
-            closestDist = dist;
-            closestEnemy[0] = i;
-            closestEnemy[1] = j;
-            closeX = enemyX;
-          }
-        }
-      }
-    }
-    if (closestDist != 17) {
-      enemies[closestEnemy[0]][closestEnemy[1]] = 17;
-      score++;
-      for (int i = playerX - 1; i > closeX; i--) {
-        lcd.setCursor(i, playerY);
-        lcd.printByte(6);
-      }
-    } else {
-      for (int i = playerX - 1; i > 0; i--) {
-        lcd.setCursor(i, playerY);
-        lcd.printByte(6);
-      }
-    }
+    doShot(-1);
   }
 
   if (rBtn && !rBtnLast) {
-    // right button pressed
-    int closestDist = 17;    // set to impossible value so the code knows if there are no results
-    int closestEnemy[2] = {playerY, 5};
-    int closeX = 0;
-    for (int i = 0; i < 4; i++) {
-      int enemyY = i % 2;
-      if (enemyY == playerY) {
-        for (int j = 0; j < ENEMY_COUNT; j++) {
-          int enemyX = getEnemyX(i, j);
-          int dist = enemyX - playerX;
-          if (dist > 0 && dist < closestDist && enemies[i][j] < 17) {
-            closestDist = dist;
-            closestEnemy[0] = i;
-            closestEnemy[1] = j;
-            closeX = enemyX;
-          }
-        }
-      }
-    }
-    if (closestDist != 17) {
-      enemies[closestEnemy[0]][closestEnemy[1]] = 17;
-      score++;
-      for (int i = playerX + 1; i < closeX; i++) {
-        lcd.setCursor(i, playerY);
-        lcd.printByte(6);
-      }
-    } else {
-      for (int i = playerX + 1; i < 17; i++) {
-        lcd.setCursor(i, playerY);
-        lcd.printByte(6);
-      }
-    }
+    doShot(1);
   }
   // taking damage
   for (int i=0; i<4; i++) {
@@ -308,6 +301,7 @@ void gameLoop() {
 // POST-LOGIC CODE
   lBtnLast = lBtn;
   rBtnLast = rBtn;
+
 
 // RENDERING CODE
 
